@@ -23,12 +23,18 @@ def getDetBoxes_core(textmap, linkmap, text_threshold, link_threshold, low_text)
     img_h, img_w = textmap.shape
 
     """ labeling method """
+    # threshold 灰階分切
+    # https://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_imgproc/py_thresholding/py_thresholding.html
     ret, text_score = cv2.threshold(textmap, low_text, 1, 0)
     ret, link_score = cv2.threshold(linkmap, link_threshold, 1, 0)
 
+    # 小於min的改為min, 大於max改為max
     text_score_comb = np.clip(text_score + link_score, 0, 1)
     nLabels, labels, stats, centroids = cv2.connectedComponentsWithStats(text_score_comb.astype(np.uint8), connectivity=4)
 
+    # np.savetxt("./link_score.csv", link_score, delimiter=",")
+
+    # TODO: det is bounding
     det = []
     mapper = []
     for k in range(1,nLabels):
