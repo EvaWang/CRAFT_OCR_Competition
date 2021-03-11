@@ -7,9 +7,50 @@ import argparse
 import os
 from tqdm import tqdm
 
+# 先左再右 先小再大
+def overlap_rate(define_range, target):
+    range_w = define_range[1]-define_range[0]
+    target_w = target[1]-target[0]
 
-def find_line_btw_words(filepath, save_path):
-    ori_image = Image.open(filepath)
+    if target[1]<define_range[0] and target[0]<define_range[0]:
+        # 沒有重疊
+        return 0
+    else:
+        overlap_w = (min(define_range[1], target[1])-max(define_range[0], target[0]))/target_w
+
+    # print(overlap_w)
+    return abs(overlap_w)
+
+def cropImg(img, position, save_path):
+    img = img.copy()
+    img = img.crop(position).convert("RGB")
+    img.save(save_path)
+
+def sort_word_byline(column_idx, positions):
+    right_max = sorted(positions, key=lambda p: p[2])[-1][2]
+    sorted_list = []
+    select = 0
+    while select < len(selected_idx):
+        # 從右邊開始
+        current_col = column_idx[select]
+        print(current_col)
+        print(right_max)
+        # 左偏、右偏、完全在內、寬於範圍
+        # 算覆蓋率
+        words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions if 0.3<overlap_rate((current_col,right_max),(left,right))]
+        print(words)
+        for w in words:
+            positions.remove(w[1])
+            # print(len(positions))
+            sorted_list.append(w)
+        select = select+1
+        right_max = current_col
+
+    sorted(sorted_list, key=lambda p: p[1][2])
+    print(sorted_list)
+    return sorted_list
+
+def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=False):
     draw_img = ori_image.copy()
     draw = ImageDraw.Draw(draw_img)
     
@@ -26,33 +67,38 @@ def find_line_btw_words(filepath, save_path):
     sum_gray = (sum_gray-sum_gray.min())/(sum_gray.max()-sum_gray.min())
 
     #抓local-min，掃描寬度為平均字寬
-    seperation_idx = peak_local_max(-sum_gray, min_distance=int(avg_width/2))
+    seperation_idx = peak_local_max(-sum_gray, min_distance=int(avg_width))
     seperation_idx = seperation_idx.squeeze()
 
-    print(avg_width)
-    selected_idx = [seperation_idx[0]+min_left]
-    draw_check = ImageDraw.Draw(ori_image)
+    # print(f"avg:{avg_width}")
+    selected_idx = []
     for idx in range(len(seperation_idx)-1):
         pos_x = seperation_idx[idx]+min_left
         if seperation_idx[idx]-seperation_idx[idx+1] !=1:
-            if (selected_idx[-1]-pos_x) < (avg_width/2):
-                print(selected_idx[-1]-pos_x)
-                print(f"check:{pos_x}")
+            if len(selected_idx)>0 and (selected_idx[-1]-pos_x)<avg_width:
+                # print(f"selected_idx[-1]:{selected_idx[-1]}, diff:{selected_idx[-1]-pos_x}")
                 continue
+            # else:print("selected_idx[-1]:None")
             selected_idx.append(pos_x)
-            draw_check.line((pos_x, 0, pos_x, ori_image.size[1]), fill=(0,255,0,5), width=10)
     
-    draw_check.line((seperation_idx[0]+min_left, 0, seperation_idx[0]+min_left, ori_image.size[1]), fill=(0,255,0,5), width=10)
-    draw_check.line((seperation_idx[-1]+min_left, 0, seperation_idx[-1]+min_left, ori_image.size[1]), fill=(0,255,0,5), width=10)
-    ori_image.convert("RGB").thumbnail((600,600))
-    ori_image.save(save_path)
+    # print(seperation_idx[-1])
+    if (selected_idx[-1]-seperation_idx[-1])>avg_width:
+        selected_idx.append(seperation_idx[-1])
+    # print(selected_idx)
 
-    selected_idx.append(seperation_idx[-1]+min_left)
+    if debug:
+        draw_check_img = ori_image.copy()
+        draw_check = ImageDraw.Draw(draw_check_img)
+        for pos in positions:
+            draw_check.rectangle([pos[0], pos[1], pos[2], pos[3]], outline="RED", width=10)
 
-    print(selected_idx)
+        for s in selected_idx:
+            draw_check.line((s, 0, s, ori_image.size[1]), fill=(0,255,0,5), width=10)
+        ori_image.convert("RGB").thumbnail((600,600))
+        ori_image.save(save_path)
 
-    pass
-
+        
+    return selected_idx
 
 def read_positions(pos_filepath):
 
@@ -102,7 +148,7 @@ def _parse_args():
     parser.add_argument('--result_folder', default='./competition/Craft_result', type=str, help='folder path to input images')
     # parser.add_argument('--result_folder', default='/nfs/home/evawang/youtube_crawler/CRAFT-pytorch/result', type=str, help='folder path to input images')
     # 存擋位置
-    parser.add_argument('--cropimg_folder', default='./competition/extract_test', type=str, help='folder path to input images')
+    parser.add_argument('--cropimg_folder', default='./competition/extract_line', type=str, help='folder path to input images')
 
     args = parser.parse_args()
     return args
@@ -115,15 +161,25 @@ if __name__ == '__main__':
         os.mkdir(args.cropimg_folder)
 
     target_files = [f for f in os.listdir(args.ori_file_folder) if os.path.isfile(os.path.join(args.ori_file_folder, f))]
-    target_files = target_files[16:17]
-
+    target_files = target_files[5:6]
 
     for t_file in tqdm(target_files):
         sp_filename = t_file.split('.')
         pos_filepath = os.path.join(args.result_folder, f"res_{sp_filename[0]}.txt")
         positions, min_left, max_right, min_top, max_btm, avg_width = read_positions(pos_filepath)
         
-        ori_filepath = os.path.join(args.ori_file_folder, t_file)
+        # ori_filepath = os.path.join(args.ori_file_folder, t_file)
         save_path = os.path.join(args.cropimg_folder, f"{sp_filename[0]}.jpg")
-        find_line_btw_words(ori_filepath, save_path)
-      
+        img = Image.open(os.path.join(args.ori_file_folder, t_file))
+        # 依直欄切分
+        selected_idx = find_line_btw_words(img, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=True)
+        sorted_list = sort_word_byline(selected_idx, positions)
+        count = 0
+        for line_key, pos in sorted_list:
+            sub_folder = os.path.join(args.cropimg_folder, f"{line_key}")
+            if not os.path.isdir(sub_folder):
+                os.mkdir(sub_folder)
+
+            save_path = pos_filepath = os.path.join(sub_folder, f"res_{sp_filename[0]}_{line_key}_{count}.jpg")
+            cropImg(img, pos, save_path)
+            count = count+1
