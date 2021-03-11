@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 # 先左再右 先小再大
 def overlap_rate(define_range, target):
-    range_w = define_range[1]-define_range[0]
+    # range_w = define_range[1]-define_range[0]
     target_w = target[1]-target[0]
 
     if target[1]<define_range[0] and target[0]<define_range[0]:
@@ -27,18 +27,19 @@ def cropImg(img, position, save_path):
     img.save(save_path)
 
 def sort_word_byline(column_idx, positions):
+    # column_idx.append(0) # 加入最左邊
     right_max = sorted(positions, key=lambda p: p[2])[-1][2]
     sorted_list = []
     select = 0
     while select < len(selected_idx):
         # 從右邊開始
         current_col = column_idx[select]
-        print(current_col)
-        print(right_max)
+        # print(current_col)
+        # print(right_max)
         # 左偏、右偏、完全在內、寬於範圍
         # 算覆蓋率
-        words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions if 0.3<overlap_rate((current_col,right_max),(left,right))]
-        print(words)
+        words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions if 0.8<overlap_rate((current_col,right_max),(left,right))]
+        # print(words)
         for w in words:
             positions.remove(w[1])
             # print(len(positions))
@@ -46,8 +47,11 @@ def sort_word_byline(column_idx, positions):
         select = select+1
         right_max = current_col
 
+    # 剩的全進
+    words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions]
+    sorted_list = sorted_list+words
     sorted(sorted_list, key=lambda p: p[1][2])
-    print(sorted_list)
+    # print(sorted_list)
     return sorted_list
 
 def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=False):
@@ -94,10 +98,9 @@ def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, mi
 
         for s in selected_idx:
             draw_check.line((s, 0, s, ori_image.size[1]), fill=(0,255,0,5), width=10)
-        ori_image.convert("RGB").thumbnail((600,600))
-        ori_image.save(save_path)
+        draw_check_img.convert("RGB").thumbnail((600,600))
+        draw_check_img.save(save_path)
 
-        
     return selected_idx
 
 def read_positions(pos_filepath):
@@ -148,7 +151,8 @@ def _parse_args():
     parser.add_argument('--result_folder', default='./competition/Craft_result', type=str, help='folder path to input images')
     # parser.add_argument('--result_folder', default='/nfs/home/evawang/youtube_crawler/CRAFT-pytorch/result', type=str, help='folder path to input images')
     # 存擋位置
-    parser.add_argument('--cropimg_folder', default='./competition/extract_line', type=str, help='folder path to input images')
+    parser.add_argument('--cropimg_folder', default='./competition/extract', type=str, help='folder path to input images')
+    parser.add_argument('--debug', default=False, type=bool, help='draw debug images')
 
     args = parser.parse_args()
     return args
@@ -161,7 +165,7 @@ if __name__ == '__main__':
         os.mkdir(args.cropimg_folder)
 
     target_files = [f for f in os.listdir(args.ori_file_folder) if os.path.isfile(os.path.join(args.ori_file_folder, f))]
-    target_files = target_files[5:6]
+    # target_files = target_files[5:6]
 
     for t_file in tqdm(target_files):
         sp_filename = t_file.split('.')
@@ -172,14 +176,16 @@ if __name__ == '__main__':
         save_path = os.path.join(args.cropimg_folder, f"{sp_filename[0]}.jpg")
         img = Image.open(os.path.join(args.ori_file_folder, t_file))
         # 依直欄切分
-        selected_idx = find_line_btw_words(img, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=True)
+        selected_idx = find_line_btw_words(img, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=args.debug)
         sorted_list = sort_word_byline(selected_idx, positions)
         count = 0
         for line_key, pos in sorted_list:
-            sub_folder = os.path.join(args.cropimg_folder, f"{line_key}")
-            if not os.path.isdir(sub_folder):
-                os.mkdir(sub_folder)
+            folder = args.cropimg_folder
+            if args.debug:
+                folder = os.path.join(args.cropimg_folder, f"{line_key}")
+                if not os.path.isdir(folder):
+                    os.mkdir(folder)
 
-            save_path = pos_filepath = os.path.join(sub_folder, f"res_{sp_filename[0]}_{line_key}_{count}.jpg")
+            save_path = os.path.join(folder, f"res_{sp_filename[0]}_{line_key:03d}_{count:03d}.jpg")
             cropImg(img, pos, save_path)
             count = count+1
