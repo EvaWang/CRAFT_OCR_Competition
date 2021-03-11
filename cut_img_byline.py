@@ -84,10 +84,10 @@ def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, mi
                 continue
             # else:print("selected_idx[-1]:None")
             selected_idx.append(pos_x)
-    
+
     # print(seperation_idx[-1])
     if (selected_idx[-1]-seperation_idx[-1])>avg_width:
-        selected_idx.append(seperation_idx[-1])
+        selected_idx.append(seperation_idx[-1]+min_left)
     # print(selected_idx)
 
     if debug:
@@ -101,26 +101,21 @@ def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, mi
         draw_check_img.convert("RGB").thumbnail((600,600))
         draw_check_img.save(save_path)
 
+    # print(selected_idx)
     return selected_idx
 
 def read_positions(pos_filepath):
 
     file1 = open(pos_filepath, 'r')
-    count = 0
     pos = []
     collect_left=[]
     collect_right=[]
     collect_top=[]
     collect_btm=[]
     collect_width=[]
+    not_divied = []
     while True:
-        count += 1
-    
-        # Get next line from file
         line = file1.readline()
-        
-        # if line is empty
-        # end of file is reached
         if not line:
             break
         
@@ -131,16 +126,28 @@ def read_positions(pos_filepath):
         right = max(arr[0], arr[2], arr[4], arr[6])
         bottom = max(arr[1], arr[3], arr[5], arr[7])
 
-        pos.append((left, top, right, bottom))
-        collect_left.append(left)
-        collect_right.append(right)
-        collect_top.append(top)
-        collect_btm.append(bottom)
-        collect_width.append(right-left)
-    
+        width = right-left
+        height = bottom-top
+
+        ratio = height/width
+        if ratio > 1.6:
+            not_divied.append((left, top, right, bottom))
+        else:
+            pos.append((left, top, right, bottom))
+            collect_left.append(left)
+            collect_right.append(right)
+            collect_top.append(top)
+            collect_btm.append(bottom)
+            collect_width.append(width)
+
     file1.close()
     
     avg_width = np.average(collect_width)
+    for d in not_divied:
+        if (d[2]-d[0])>avg_width*0.5:
+            pos.append((d[0], d[1], d[2], int(0.5*(d[1]+d[3]))))
+            pos.append((d[0], int(0.5*(d[1]+d[3])),  d[2], d[3]))
+            
     return pos, min(collect_left), max(collect_right), min(collect_top), max(collect_btm), avg_width
 
 def _parse_args():
@@ -151,8 +158,8 @@ def _parse_args():
     parser.add_argument('--result_folder', default='./competition/Craft_result', type=str, help='folder path to input images')
     # parser.add_argument('--result_folder', default='/nfs/home/evawang/youtube_crawler/CRAFT-pytorch/result', type=str, help='folder path to input images')
     # 存擋位置
-    parser.add_argument('--cropimg_folder', default='./competition/extract', type=str, help='folder path to input images')
-    parser.add_argument('--debug', default=False, type=bool, help='draw debug images')
+    parser.add_argument('--cropimg_folder', default='./competition/extract_debug', type=str, help='folder path to input images')
+    parser.add_argument('--debug', default=True, type=bool, help='draw debug images')
 
     args = parser.parse_args()
     return args
@@ -165,14 +172,13 @@ if __name__ == '__main__':
         os.mkdir(args.cropimg_folder)
 
     target_files = [f for f in os.listdir(args.ori_file_folder) if os.path.isfile(os.path.join(args.ori_file_folder, f))]
-    # target_files = target_files[5:6]
+    target_files = target_files[1:2]
 
     for t_file in tqdm(target_files):
         sp_filename = t_file.split('.')
         pos_filepath = os.path.join(args.result_folder, f"res_{sp_filename[0]}.txt")
         positions, min_left, max_right, min_top, max_btm, avg_width = read_positions(pos_filepath)
         
-        # ori_filepath = os.path.join(args.ori_file_folder, t_file)
         save_path = os.path.join(args.cropimg_folder, f"{sp_filename[0]}.jpg")
         img = Image.open(os.path.join(args.ori_file_folder, t_file))
         # 依直欄切分
