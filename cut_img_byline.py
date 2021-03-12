@@ -8,18 +8,19 @@ import os
 from tqdm import tqdm
 
 # 先左再右 先小再大
-def overlap_rate(define_range, target):
+def overlap_rate(define_range, target, is_horizontal=True):
     # range_w = define_range[1]-define_range[0]
     target_w = target[1]-target[0]
-
-    if target[1]<define_range[0] and target[0]<define_range[0]:
-        # 沒有重疊
-        return 0
+    overlap_w = 0
+    if is_horizontal:
+        if target[1]<=define_range[0] and target[0]<=define_range[0]:
+            return 0 # 沒有重疊
     else:
-        overlap_w = (min(define_range[1], target[1])-max(define_range[0], target[0]))/target_w
+        if  (target[1]<=define_range[0] and target[0]<=define_range[0]) or \
+            (target[0]>=define_range[1] and target[1]>=define_range[1]):
+            return 0 # 沒有重疊
 
-    if overlap_w<0.5:
-        print(overlap_w)
+    overlap_w = (min(define_range[1], target[1])-max(define_range[0], target[0]))/target_w
     return abs(overlap_w)
 
 def cropImg(img, position, save_path):
@@ -31,29 +32,56 @@ def sort_word_byline(column_idx, positions):
     # column_idx.append(0) # 加入最左邊
     right_max = sorted(positions, key=lambda p: p[2])[-1][2]
     sorted_list = []
-    select = 0
-    while select < len(selected_idx):
+    select_col = 0
+    while select_col < len(column_idx):
         # 從右邊開始
-        current_col = column_idx[select]
+        current_col = column_idx[select_col]
         # print(f"{current_col},{right_max}")
-        # print(current_col)
-        # print(right_max)
         # 左偏、右偏、完全在內、寬於範圍
         # 算覆蓋率
-        words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions if 0.6<overlap_rate((current_col,right_max),(left,right))]
-        # print(words)
-        for w in words:
-            positions.remove(w[1])
-            # print(len(positions))
-            sorted_list.append(w)
-        select = select+1
+        words = [ (select_col, (left, top, right, btm)) for left, top, right, btm in positions if 0.6 < overlap_rate((current_col,right_max),(left,right))]
+        words = sorted(words, key=lambda p: p[1][3]) # 依高度排
+
+        # 依高度掃 預設有兩個 沒有就左邊放NONE
+        ordered_byHeight = [[None, words[0]]]
+        positions.remove(words[0][1])
+        for idx in range(1, len(words)):
+            r = overlap_rate((words[idx-1][1][1], words[idx-1][1][3]), (words[idx][1][1], words[idx][1][3]), False)
+            if r>0.5:
+                right = words[idx-1]
+                left =  words[idx]
+                if words[idx-1][1][2] < words[idx][1][2]:
+                    right = words[idx]
+                    left = words[idx-1]
+                ordered_byHeight[-1] = [left, right]
+            else:
+                ordered_byHeight.append([None, words[idx]])
+            positions.remove(words[idx][1])
+
+        queue = []
+        for left_w, right_w in ordered_byHeight:
+            if left_w == None:
+                sorted_list = sorted_list + queue
+                queue = []
+            else:
+                queue.append(left_w)
+            sorted_list.append(right_w)
+            # print(right_w)
+
+        # if select_col==6:
+        #     for order in ordered_byHeight:
+        #         print(order)
+
+        if len(queue)>0:
+            sorted_list = sorted_list + queue
+
+        select_col = select_col +1
         right_max = current_col
 
     # 剩的全進
-    words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions]
+    words = [ (select_col, (left, top, right, btm)) for left, top, right, btm in positions] # 這排沒有排序到
+    words = sorted(words, key=lambda p: p[1][2])
     sorted_list = sorted_list+words
-    sorted(sorted_list, key=lambda p: p[1][2])
-    # print(sorted_list)
     return sorted_list
 
 def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=False):
