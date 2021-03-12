@@ -18,7 +18,8 @@ def overlap_rate(define_range, target):
     else:
         overlap_w = (min(define_range[1], target[1])-max(define_range[0], target[0]))/target_w
 
-    # print(overlap_w)
+    if overlap_w<0.5:
+        print(overlap_w)
     return abs(overlap_w)
 
 def cropImg(img, position, save_path):
@@ -34,11 +35,12 @@ def sort_word_byline(column_idx, positions):
     while select < len(selected_idx):
         # 從右邊開始
         current_col = column_idx[select]
+        # print(f"{current_col},{right_max}")
         # print(current_col)
         # print(right_max)
         # 左偏、右偏、完全在內、寬於範圍
         # 算覆蓋率
-        words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions if 0.8<overlap_rate((current_col,right_max),(left,right))]
+        words = [ (select, (left, top, right, btm)) for left, top, right, btm in positions if 0.6<overlap_rate((current_col,right_max),(left,right))]
         # print(words)
         for w in words:
             positions.remove(w[1])
@@ -172,7 +174,7 @@ if __name__ == '__main__':
         os.mkdir(args.cropimg_folder)
 
     target_files = [f for f in os.listdir(args.ori_file_folder) if os.path.isfile(os.path.join(args.ori_file_folder, f))]
-    target_files = target_files[1:2]
+    target_files = target_files[2:3]
 
     for t_file in tqdm(target_files):
         sp_filename = t_file.split('.')
