@@ -29,7 +29,7 @@ def cropImg(img, position, save_path):
     img.save(save_path)
 
 def sort_word_byline(column_idx, positions):
-    # column_idx.append(0) # 加入最左邊
+    column_idx.append(0) # 加入最左邊
     right_max = sorted(positions, key=lambda p: p[2])[-1][2]
     sorted_list = []
     select_col = 0
@@ -41,6 +41,11 @@ def sort_word_byline(column_idx, positions):
         # 算覆蓋率
         words = [ (select_col, (left, top, right, btm)) for left, top, right, btm in positions if 0.6 < overlap_rate((current_col,right_max),(left,right))]
         words = sorted(words, key=lambda p: p[1][3]) # 依高度排
+
+        if len(words)==0: 
+            select_col = select_col +1
+            right_max = current_col
+            continue
 
         # 依高度掃 預設有兩個 沒有就左邊放NONE
         ordered_byHeight = [[None, words[0]]]
@@ -63,25 +68,15 @@ def sort_word_byline(column_idx, positions):
             if left_w == None:
                 sorted_list = sorted_list + queue
                 queue = []
-            else:
-                queue.append(left_w)
+            else: queue.append(left_w)
             sorted_list.append(right_w)
-            # print(right_w)
-
-        # if select_col==6:
-        #     for order in ordered_byHeight:
-        #         print(order)
-
+       
         if len(queue)>0:
             sorted_list = sorted_list + queue
 
         select_col = select_col +1
         right_max = current_col
 
-    # 剩的全進
-    words = [ (select_col, (left, top, right, btm)) for left, top, right, btm in positions] # 這排沒有排序到
-    words = sorted(words, key=lambda p: p[1][2])
-    sorted_list = sorted_list+words
     return sorted_list
 
 def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, min_top, max_btm, avg_width, debug=False):
@@ -101,24 +96,19 @@ def find_line_btw_words(ori_image, save_path, positions, min_left, max_right, mi
     sum_gray = (sum_gray-sum_gray.min())/(sum_gray.max()-sum_gray.min())
 
     #抓local-min，掃描寬度為平均字寬
-    seperation_idx = peak_local_max(-sum_gray, min_distance=int(avg_width))
+    seperation_idx = peak_local_max(-sum_gray, min_distance=int(avg_width/2))
     seperation_idx = seperation_idx.squeeze()
 
     # print(f"avg:{avg_width}")
-    selected_idx = []
-    for idx in range(len(seperation_idx)-1):
+    selected_idx = [seperation_idx[0]+min_left]
+    for idx in range(1, len(seperation_idx)):
         pos_x = seperation_idx[idx]+min_left
-        if seperation_idx[idx]-seperation_idx[idx+1] !=1:
-            if len(selected_idx)>0 and (selected_idx[-1]-pos_x)<avg_width:
+        if seperation_idx[idx-1]-seperation_idx[idx] !=1:
+            if len(selected_idx)>0 and (selected_idx[-1]-pos_x) < avg_width:
                 # print(f"selected_idx[-1]:{selected_idx[-1]}, diff:{selected_idx[-1]-pos_x}")
                 continue
             # else:print("selected_idx[-1]:None")
             selected_idx.append(pos_x)
-
-    # print(seperation_idx[-1])
-    if (selected_idx[-1]-seperation_idx[-1])>avg_width:
-        selected_idx.append(seperation_idx[-1]+min_left)
-    # print(selected_idx)
 
     if debug:
         draw_check_img = ori_image.copy()
@@ -182,14 +172,10 @@ def read_positions(pos_filepath):
 
 def _parse_args():
     parser = argparse.ArgumentParser(description='Extract Char From CRAFT Text Detection')
-    # 原圖位置
-    parser.add_argument('--ori_file_folder', default='./competition/Training_Set/tif', type=str, help='filename')
-    # 辨識txt檔案位置
-    parser.add_argument('--result_folder', default='./competition/Craft_result', type=str, help='folder path to input images')
-    # parser.add_argument('--result_folder', default='/nfs/home/evawang/youtube_crawler/CRAFT-pytorch/result', type=str, help='folder path to input images')
-    # 存擋位置
-    parser.add_argument('--cropimg_folder', default='./competition/extract_debug', type=str, help='folder path to input images')
-    parser.add_argument('--debug', default=True, type=bool, help='draw debug images')
+    parser.add_argument('--ori_file_folder', default='./competition/Training_Set/tif', type=str, help='原圖位置')
+    parser.add_argument('--result_folder', default='./competition/Craft_result', type=str, help='辨識txt檔案位置')
+    parser.add_argument('--cropimg_folder', default='./competition/extract_20', type=str, help='存擋位置')
+    parser.add_argument('--debug', default=False, type=bool, help='draw debug images')
 
     args = parser.parse_args()
     return args
@@ -202,8 +188,10 @@ if __name__ == '__main__':
         os.mkdir(args.cropimg_folder)
 
     target_files = [f for f in os.listdir(args.ori_file_folder) if os.path.isfile(os.path.join(args.ori_file_folder, f))]
-    target_files = target_files[2:3]
+    # mock test
+    target_files = target_files[19:20]
 
+    char_img_arr = []
     for t_file in tqdm(target_files):
         sp_filename = t_file.split('.')
         pos_filepath = os.path.join(args.result_folder, f"res_{sp_filename[0]}.txt")
@@ -224,4 +212,12 @@ if __name__ == '__main__':
 
             save_path = os.path.join(folder, f"res_{sp_filename[0]}_{line_key:03d}_{count:03d}.jpg")
             cropImg(img, pos, save_path)
+
+            # if args.debug: cropImg(img, pos, save_path)
+            
+            # img = img.copy()
+            # img = img.crop(pos)
+            
+            # char_img_arr.append(img)
+
             count = count+1
