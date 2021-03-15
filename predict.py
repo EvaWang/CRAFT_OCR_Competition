@@ -56,6 +56,8 @@ def _parse_args():
     parser.add_argument('--test_folder', default='/data/', type=str, help='folder path to input images')
     parser.add_argument('--refine', default=False, action='store_true', help='enable link refiner')
     parser.add_argument('--refiner_model', default='weights/craft_refiner_CTW1500.pth', type=str, help='pretrained refiner model')
+    parser.add_argument('--result_folder', default='', type=str, help='save results')
+    parser.add_argument('--debug', default=0, type=int, help='output debug pictures.')
 
     args = parser.parse_args()
     return args
@@ -150,11 +152,13 @@ def inference(args):
     return net, refine_net
     
 
-result_folder = './result/'
+
 
 
 if __name__ == '__main__':
     args = _parse_args()
+
+    result_folder = args.result_folder
 
     """ For test images in a folder """
     image_list, _, _ = file_utils.get_files(args.test_folder)
@@ -172,13 +176,11 @@ if __name__ == '__main__':
 
         bboxes, polys, score_text, score_text_arr, score_link_arr  = test_net(args, net, image, args.text_threshold, args.link_threshold, args.low_text, args.cuda, args.poly, refine_net)
 
-        # save score text
-        filename, file_ext = os.path.splitext(os.path.basename(image_path))
-        mask_file = result_folder + "/res_" + filename + '_mask.jpg'
-        cv2.imwrite(mask_file, score_text)
-
-        np.savetxt(f"./res_{filename}_score_text.csv", score_text_arr, delimiter=",")
-        np.savetxt(f"./res_{filename}_score_link.csv", score_link_arr, delimiter=",")
+        if args.debug == 1:
+            # save score text
+            filename, file_ext = os.path.splitext(os.path.basename(image_path))
+            mask_file = result_folder + "/res_" + filename + '_mask.jpg'
+            cv2.imwrite(mask_file, score_text)
 
         file_utils.saveResult(image_path, image[:,:,::-1], polys, dirname=result_folder)
 

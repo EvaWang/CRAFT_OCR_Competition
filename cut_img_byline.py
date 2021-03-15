@@ -189,7 +189,7 @@ if __name__ == '__main__':
 
     target_files = [f for f in os.listdir(args.ori_file_folder) if os.path.isfile(os.path.join(args.ori_file_folder, f))]
     # mock test
-    target_files = target_files[19:20]
+    # target_files = target_files[19:20]
 
     char_img_arr = []
     for t_file in tqdm(target_files):
@@ -221,3 +221,5 @@ if __name__ == '__main__':
             # char_img_arr.append(img)
 
             count = count+1
+    
+    print("done.")
